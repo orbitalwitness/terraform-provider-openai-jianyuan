@@ -77,6 +77,32 @@ route.get("/:service_account_id", async (c) => {
   return c.json(service_account);
 });
 
+route.post(
+  "/:service_account_id",
+  zValidator("json", z.object({ name: z.string() })),
+  async (c) => {
+    const project = c.get("project");
+    const service_account_id = c.req.param("service_account_id");
+    const { name } = c.req.valid("json");
+
+    const [service_account] = await db
+      .update(schema.projectServiceAccounts)
+      .set({ name })
+      .where(
+        and(
+          eq(schema.projectServiceAccounts.project_id, project.id),
+          eq(schema.projectServiceAccounts.id, service_account_id),
+        ),
+      )
+      .returning();
+    if (!service_account) {
+      return c.json({ error: "Service account not found" }, 404);
+    }
+
+    return c.json(service_account);
+  },
+);
+
 route.delete("/:service_account_id", async (c) => {
   const project = c.get("project");
   const service_account_id = c.req.param("service_account_id");
