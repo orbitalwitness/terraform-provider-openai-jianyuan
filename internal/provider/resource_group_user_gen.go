@@ -71,6 +71,7 @@ func (r *GroupUserResource) Create(ctx context.Context, req resource.CreateReque
 	}
 
 	modelInstance, err := r.client.Admin.Organization.Groups.Users.New(ctx, data.GroupId.ValueString(), *body)
+	invalidateList(r.client, "group_user"+"/"+data.GroupId.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to create, got error: %s", err))
 		return
@@ -95,7 +96,14 @@ func (r *GroupUserResource) Read(ctx context.Context, req resource.ReadRequest, 
 		return
 	}
 
-	modelInstance, err := r.client.Admin.Organization.Groups.Users.Get(ctx, data.GroupId.ValueString(), data.UserId.ValueString())
+	modelInstance, err := cachedGet(ctx, r.client, "group_user"+"/"+data.GroupId.ValueString(), data.UserId.ValueString(), func(ctx context.Context) (map[string]openai.OrganizationGroupUser, error) {
+		items := map[string]openai.OrganizationGroupUser{}
+		iter := r.client.Admin.Organization.Groups.Users.ListAutoPaging(ctx, data.GroupId.ValueString(), openai.AdminOrganizationGroupUserListParams{Limit: openai.Int(100)})
+		for iter.Next() {
+			items[iter.Current().ID] = iter.Current()
+		}
+		return items, iter.Err()
+	})
 	if err != nil {
 		if apiErr, ok := errors.AsType[*openai.Error](err); ok && apiErr.StatusCode == http.StatusNotFound {
 			resp.State.RemoveResource(ctx)
@@ -105,7 +113,7 @@ func (r *GroupUserResource) Read(ctx context.Context, req resource.ReadRequest, 
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to read, got error: %s", err))
 		return
 	} else if modelInstance == nil {
-		resp.Diagnostics.AddError("Client Error", "Unable to read, got empty response body")
+		resp.State.RemoveResource(ctx)
 		return
 	}
 
@@ -130,6 +138,7 @@ func (r *GroupUserResource) Delete(ctx context.Context, req resource.DeleteReque
 	}
 
 	_, err := r.client.Admin.Organization.Groups.Users.Delete(ctx, data.GroupId.ValueString(), data.UserId.ValueString())
+	invalidateList(r.client, "group_user"+"/"+data.GroupId.ValueString())
 	if err != nil {
 		if apiErr, ok := errors.AsType[*openai.Error](err); ok && apiErr.StatusCode == http.StatusNotFound {
 			return

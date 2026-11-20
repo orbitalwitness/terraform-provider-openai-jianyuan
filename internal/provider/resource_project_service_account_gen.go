@@ -107,6 +107,7 @@ func (r *ProjectServiceAccountResource) Create(ctx context.Context, req resource
 	}
 
 	modelInstance, err := r.client.Admin.Organization.Projects.ServiceAccounts.New(ctx, data.ProjectId.ValueString(), *body)
+	invalidateList(r.client, "project_service_account"+"/"+data.ProjectId.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to create, got error: %s", err))
 		return
@@ -131,7 +132,14 @@ func (r *ProjectServiceAccountResource) Read(ctx context.Context, req resource.R
 		return
 	}
 
-	modelInstance, err := r.client.Admin.Organization.Projects.ServiceAccounts.Get(ctx, data.ProjectId.ValueString(), data.Id.ValueString())
+	modelInstance, err := cachedGet(ctx, r.client, "project_service_account"+"/"+data.ProjectId.ValueString(), data.Id.ValueString(), func(ctx context.Context) (map[string]openai.ProjectServiceAccount, error) {
+		items := map[string]openai.ProjectServiceAccount{}
+		iter := r.client.Admin.Organization.Projects.ServiceAccounts.ListAutoPaging(ctx, data.ProjectId.ValueString(), openai.AdminOrganizationProjectServiceAccountListParams{Limit: openai.Int(100)})
+		for iter.Next() {
+			items[iter.Current().ID] = iter.Current()
+		}
+		return items, iter.Err()
+	})
 	if err != nil {
 		if apiErr, ok := errors.AsType[*openai.Error](err); ok && apiErr.StatusCode == http.StatusNotFound {
 			resp.State.RemoveResource(ctx)
@@ -141,7 +149,7 @@ func (r *ProjectServiceAccountResource) Read(ctx context.Context, req resource.R
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to read, got error: %s", err))
 		return
 	} else if modelInstance == nil {
-		resp.Diagnostics.AddError("Client Error", "Unable to read, got empty response body")
+		resp.State.RemoveResource(ctx)
 		return
 	}
 
@@ -168,6 +176,7 @@ func (r *ProjectServiceAccountResource) Update(ctx context.Context, req resource
 	}
 
 	modelInstance, err := r.client.Admin.Organization.Projects.ServiceAccounts.Update(ctx, data.ProjectId.ValueString(), data.Id.ValueString(), *body)
+	invalidateList(r.client, "project_service_account"+"/"+data.ProjectId.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to update, got error: %s", err))
 		return
@@ -193,6 +202,7 @@ func (r *ProjectServiceAccountResource) Delete(ctx context.Context, req resource
 	}
 
 	_, err := r.client.Admin.Organization.Projects.ServiceAccounts.Delete(ctx, data.ProjectId.ValueString(), data.Id.ValueString())
+	invalidateList(r.client, "project_service_account"+"/"+data.ProjectId.ValueString())
 	if err != nil {
 		if apiErr, ok := errors.AsType[*openai.Error](err); ok && apiErr.StatusCode == http.StatusNotFound {
 			return

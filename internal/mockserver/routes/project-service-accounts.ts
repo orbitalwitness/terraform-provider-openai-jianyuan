@@ -44,6 +44,22 @@ route.post(
   },
 );
 
+route.get("/", async (c) => {
+  const project = c.get("project");
+
+  const service_accounts = await db.query.projectServiceAccounts.findMany({
+    where: eq(schema.projectServiceAccounts.project_id, project.id),
+  });
+
+  return c.json({
+    object: "list",
+    data: service_accounts,
+    first_id: service_accounts[0]?.id ?? null,
+    last_id: service_accounts.at(-1)?.id ?? null,
+    has_more: false,
+  });
+});
+
 route.get("/:service_account_id", async (c) => {
   const project = c.get("project");
   const service_account_id = c.req.param("service_account_id");
