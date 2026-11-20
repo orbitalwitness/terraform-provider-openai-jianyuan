@@ -15,7 +15,7 @@ func (m *GroupUserResourceModel) Fill(ctx context.Context, data any) diag.Diagno
 		m.GroupId = supertypes.NewStringValue(data.GroupID)
 		m.UserId = supertypes.NewStringValue(data.UserID)
 		return nil
-	case openai.AdminOrganizationGroupUserGetResponse:
+	case openai.OrganizationGroupUser:
 		m.UserId = supertypes.NewStringValue(data.ID)
 		return nil
 	default:

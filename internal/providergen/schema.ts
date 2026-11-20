@@ -158,9 +158,17 @@ export interface PaginateResourceApiStrategy extends BaseResourceApiStrategy {
   readModel: string;
 }
 
+// Reads are served from one cached list call per parent scope. The last read request attribute is the item ID.
+export interface ListResourceApiStrategy extends BaseResourceApiStrategy {
+  readStrategy: "list";
+  readModel: string;
+  readRequestParamsStruct: string;
+}
+
 export type ResourceApiStrategy =
   | SimpleResourceApiStrategy
-  | PaginateResourceApiStrategy;
+  | PaginateResourceApiStrategy
+  | ListResourceApiStrategy;
 
 export interface Resource {
   name: string;
