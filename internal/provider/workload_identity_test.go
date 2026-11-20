@@ -92,7 +92,15 @@ func TestWorkloadIdentityLifecycle(t *testing.T) {
 			_, _ = w.Write([]byte(`{"deleted":true}`))
 			return
 		case http.MethodGet:
-			if !exists {
+			if strings.HasSuffix(path, "/federation_rules") {
+				var data []map[string]any
+				for key, item := range objects {
+					if strings.HasPrefix(key, path+"/") {
+						data = append(data, item)
+					}
+				}
+				value = map[string]any{"object": "list", "data": data, "has_more": false}
+			} else if !exists {
 				w.WriteHeader(http.StatusNotFound)
 				return
 			}

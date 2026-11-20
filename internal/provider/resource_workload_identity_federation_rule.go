@@ -99,6 +99,33 @@ func (m workloadIdentityFederationRuleModel) resourcePath() string {
 	return m.collectionPath() + "/" + url.PathEscape(m.ID.ValueString())
 }
 
+func (m workloadIdentityFederationRuleModel) cacheScope() string {
+	return "workload_identity_federation_rule/" + m.WorkloadIdentityProviderID.ValueString()
+}
+
+func (r *WorkloadIdentityFederationRuleResource) list(collectionPath string) func(context.Context) (map[string]workloadIdentityFederationRuleResponse, error) {
+	return func(ctx context.Context) (map[string]workloadIdentityFederationRuleResponse, error) {
+		items := map[string]workloadIdentityFederationRuleResponse{}
+		query := url.Values{"limit": {"100"}}
+		for {
+			var page struct {
+				Data    []workloadIdentityFederationRuleResponse `json:"data"`
+				HasMore bool                                     `json:"has_more"`
+			}
+			if err := r.workloadIdentityRequest(ctx, http.MethodGet, collectionPath+"?"+query.Encode(), nil, &page); err != nil {
+				return nil, err
+			}
+			for _, item := range page.Data {
+				items[item.ID] = item
+			}
+			if !page.HasMore || len(page.Data) == 0 {
+				return items, nil
+			}
+			query.Set("after", page.Data[len(page.Data)-1].ID)
+		}
+	}
+}
+
 func (m workloadIdentityFederationRuleModel) body(ctx context.Context, create bool) (map[string]any, diag.Diagnostics) {
 	body := map[string]any{"attribute_matchers": json.RawMessage(m.AttributeMatchers.ValueString()), "enabled": m.Enabled.ValueBool()}
 	if create {
@@ -149,7 +176,9 @@ func (r *WorkloadIdentityFederationRuleResource) Create(ctx context.Context, req
 		return
 	}
 	var value workloadIdentityFederationRuleResponse
-	if err := r.workloadIdentityRequest(ctx, http.MethodPost, data.collectionPath(), body, &value); err != nil {
+	err := r.workloadIdentityRequest(ctx, http.MethodPost, data.collectionPath(), body, &value)
+	r.listCache().invalidate(data.cacheScope())
+	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to create workload identity federation rule: %s", err))
 		return
 	}
@@ -163,16 +192,15 @@ func (r *WorkloadIdentityFederationRuleResource) Read(ctx context.Context, req r
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	var value workloadIdentityFederationRuleResponse
-	if err := r.workloadIdentityRequest(ctx, http.MethodGet, data.resourcePath(), nil, &value); err != nil {
-		if workloadIdentityNotFound(err) {
-			resp.State.RemoveResource(ctx)
-			return
-		}
+	value, err := cachedGet(ctx, r.listCache(), data.cacheScope(), data.ID.ValueString(), r.list(data.collectionPath()))
+	if err != nil && !workloadIdentityNotFound(err) {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to read workload identity federation rule: %s", err))
 		return
+	} else if value == nil {
+		resp.State.RemoveResource(ctx)
+		return
 	}
-	resp.Diagnostics.Append(data.fill(ctx, value)...)
+	resp.Diagnostics.Append(data.fill(ctx, *value)...)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -188,7 +216,9 @@ func (r *WorkloadIdentityFederationRuleResource) Update(ctx context.Context, req
 		return
 	}
 	var value workloadIdentityFederationRuleResponse
-	if err := r.workloadIdentityRequest(ctx, http.MethodPost, data.resourcePath(), body, &value); err != nil {
+	err := r.workloadIdentityRequest(ctx, http.MethodPost, data.resourcePath(), body, &value)
+	r.listCache().invalidate(data.cacheScope())
+	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to update workload identity federation rule: %s", err))
 		return
 	}
@@ -202,7 +232,9 @@ func (r *WorkloadIdentityFederationRuleResource) Delete(ctx context.Context, req
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	if err := r.workloadIdentityRequest(ctx, http.MethodDelete, data.resourcePath(), nil, nil); err != nil && !workloadIdentityNotFound(err) {
+	err := r.workloadIdentityRequest(ctx, http.MethodDelete, data.resourcePath(), nil, nil)
+	r.listCache().invalidate(data.cacheScope())
+	if err != nil && !workloadIdentityNotFound(err) {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to delete workload identity federation rule: %s", err))
 	}
 }

@@ -541,6 +541,12 @@ function generateResource({ resource }: { resource: Resource }) {
   if (resource.api.readStrategy === "paginate") {
     readRequestParams.push("params");
   }
+  const listScope = readRequestParams.slice(1, -1);
+  const listScopeKey = [`"${resource.name}"`, ...listScope].join(`+"/"+`);
+  const invalidateListCache =
+    resource.api.readStrategy === "list"
+      ? `\nr.listCache().invalidate(${listScopeKey})`
+      : "";
 
   const updateRequestParams = ["ctx"];
   if (resource.api.updateRequestAttributes) {
@@ -630,7 +636,7 @@ func (r *${resourceName}) Create(ctx context.Context, req resource.CreateRequest
     return
   }
 
-  modelInstance, err := r.client.${resource.api.method}.${resource.api.createMethod}(${createRequestParams.join(",")})
+  modelInstance, err := r.client.${resource.api.method}.${resource.api.createMethod}(${createRequestParams.join(",")})${invalidateListCache}
   if err != nil {
     resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to create, got error: %s", err))
     return
@@ -685,7 +691,18 @@ func (r *${resourceName}) Read(ctx context.Context, req resource.ReadRequest, re
     )
     .otherwise(
       (api) => `
-        modelInstance, err := r.client.${api.method}.Get(${readRequestParams.join(",")})
+        ${
+          api.readStrategy === "list"
+            ? `modelInstance, err := cachedGet(ctx, r.listCache(), ${listScopeKey}, ${readRequestParams.at(-1)}, func(ctx context.Context) (map[string]openai.${api.readModel}, error) {
+                items := map[string]openai.${api.readModel}{}
+                iter := r.client.${api.method}.${api.readMethod}(ctx, ${listScope.join(",")}, openai.${api.readRequestParamsStruct}{Limit: openai.Int(100)})
+                for iter.Next() {
+                  items[iter.Current().ID] = iter.Current()
+                }
+                return items, iter.Err()
+              })`
+            : `modelInstance, err := r.client.${api.method}.Get(${readRequestParams.join(",")})`
+        }
         if err != nil {
           if apiErr, ok := errors.AsType[*openai.Error](err); ok && apiErr.StatusCode == http.StatusNotFound {
             resp.State.RemoveResource(ctx)
@@ -695,7 +712,11 @@ func (r *${resourceName}) Read(ctx context.Context, req resource.ReadRequest, re
           resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to read, got error: %s", err))
           return
         } else if modelInstance == nil {
-          resp.Diagnostics.AddError("Client Error", "Unable to read, got empty response body")
+          ${
+            api.readStrategy === "list"
+              ? "resp.State.RemoveResource(ctx)"
+              : `resp.Diagnostics.AddError("Client Error", "Unable to read, got empty response body")`
+          }
           return
         }
       `,
@@ -726,7 +747,7 @@ func (r *${resourceName}) Update(ctx context.Context, req resource.UpdateRequest
         return
       }
 
-      modelInstance, err := r.client.${resource.api.method}.${resource.api.updateMethod}(${updateRequestParams.join(",")})
+      modelInstance, err := r.client.${resource.api.method}.${resource.api.updateMethod}(${updateRequestParams.join(",")})${invalidateListCache}
       if err != nil {
         resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to update, got error: %s", err))
         return
@@ -759,7 +780,7 @@ func (r *${resourceName}) Delete(ctx context.Context, req resource.DeleteRequest
         return
       }
 
-      _, err := r.client.${resource.api.method}.${resource.api.deleteMethod}(${deleteRequestParams.join(",")})
+      _, err := r.client.${resource.api.method}.${resource.api.deleteMethod}(${deleteRequestParams.join(",")})${invalidateListCache}
       if err != nil {
         if apiErr, ok := errors.AsType[*openai.Error](err); ok && apiErr.StatusCode == http.StatusNotFound {
           return
