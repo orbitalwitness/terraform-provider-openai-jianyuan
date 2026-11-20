@@ -74,6 +74,14 @@ func TestServiceAccountCreationMode(t *testing.T) {
 					}
 					account["name"] = body["name"]
 				case http.MethodGet:
+					if strings.HasSuffix(r.URL.Path, "/service_accounts") {
+						data := []any{}
+						if account != nil {
+							data = append(data, account)
+						}
+						_ = json.NewEncoder(w).Encode(map[string]any{"object": "list", "data": data, "has_more": false})
+						return
+					}
 					if account == nil {
 						w.WriteHeader(404)
 						_, _ = w.Write([]byte(`{"error":{"message":"missing"}}`))
