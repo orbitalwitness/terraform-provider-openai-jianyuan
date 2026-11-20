@@ -71,7 +71,7 @@ func (r *GroupUserResource) Create(ctx context.Context, req resource.CreateReque
 	}
 
 	modelInstance, err := r.client.Admin.Organization.Groups.Users.New(ctx, data.GroupId.ValueString(), *body)
-	r.listCache().invalidate("group_user" + "/" + data.GroupId.ValueString())
+	invalidateList(r.client, "group_user"+"/"+data.GroupId.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to create, got error: %s", err))
 		return
@@ -96,7 +96,7 @@ func (r *GroupUserResource) Read(ctx context.Context, req resource.ReadRequest, 
 		return
 	}
 
-	modelInstance, err := cachedGet(ctx, r.listCache(), "group_user"+"/"+data.GroupId.ValueString(), data.UserId.ValueString(), func(ctx context.Context) (map[string]openai.OrganizationGroupUser, error) {
+	modelInstance, err := cachedGet(ctx, r.client, "group_user"+"/"+data.GroupId.ValueString(), data.UserId.ValueString(), func(ctx context.Context) (map[string]openai.OrganizationGroupUser, error) {
 		items := map[string]openai.OrganizationGroupUser{}
 		iter := r.client.Admin.Organization.Groups.Users.ListAutoPaging(ctx, data.GroupId.ValueString(), openai.AdminOrganizationGroupUserListParams{Limit: openai.Int(100)})
 		for iter.Next() {
@@ -138,7 +138,7 @@ func (r *GroupUserResource) Delete(ctx context.Context, req resource.DeleteReque
 	}
 
 	_, err := r.client.Admin.Organization.Groups.Users.Delete(ctx, data.GroupId.ValueString(), data.UserId.ValueString())
-	r.listCache().invalidate("group_user" + "/" + data.GroupId.ValueString())
+	invalidateList(r.client, "group_user"+"/"+data.GroupId.ValueString())
 	if err != nil {
 		if apiErr, ok := errors.AsType[*openai.Error](err); ok && apiErr.StatusCode == http.StatusNotFound {
 			return

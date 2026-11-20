@@ -545,7 +545,7 @@ function generateResource({ resource }: { resource: Resource }) {
   const listScopeKey = [`"${resource.name}"`, ...listScope].join(`+"/"+`);
   const invalidateListCache =
     resource.api.readStrategy === "list"
-      ? `\nr.listCache().invalidate(${listScopeKey})`
+      ? `\ninvalidateList(r.client, ${listScopeKey})`
       : "";
 
   const updateRequestParams = ["ctx"];
@@ -693,7 +693,7 @@ func (r *${resourceName}) Read(ctx context.Context, req resource.ReadRequest, re
       (api) => `
         ${
           api.readStrategy === "list"
-            ? `modelInstance, err := cachedGet(ctx, r.listCache(), ${listScopeKey}, ${readRequestParams.at(-1)}, func(ctx context.Context) (map[string]openai.${api.readModel}, error) {
+            ? `modelInstance, err := cachedGet(ctx, r.client, ${listScopeKey}, ${readRequestParams.at(-1)}, func(ctx context.Context) (map[string]openai.${api.readModel}, error) {
                 items := map[string]openai.${api.readModel}{}
                 iter := r.client.${api.method}.${api.readMethod}(ctx, ${listScope.join(",")}, openai.${api.readRequestParamsStruct}{Limit: openai.Int(100)})
                 for iter.Next() {

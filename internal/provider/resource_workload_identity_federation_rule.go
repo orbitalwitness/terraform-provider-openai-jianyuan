@@ -177,7 +177,7 @@ func (r *WorkloadIdentityFederationRuleResource) Create(ctx context.Context, req
 	}
 	var value workloadIdentityFederationRuleResponse
 	err := r.workloadIdentityRequest(ctx, http.MethodPost, data.collectionPath(), body, &value)
-	r.listCache().invalidate(data.cacheScope())
+	invalidateList(r.client, data.cacheScope())
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to create workload identity federation rule: %s", err))
 		return
@@ -192,7 +192,7 @@ func (r *WorkloadIdentityFederationRuleResource) Read(ctx context.Context, req r
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	value, err := cachedGet(ctx, r.listCache(), data.cacheScope(), data.ID.ValueString(), r.list(data.collectionPath()))
+	value, err := cachedGet(ctx, r.client, data.cacheScope(), data.ID.ValueString(), r.list(data.collectionPath()))
 	if err != nil && !workloadIdentityNotFound(err) {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to read workload identity federation rule: %s", err))
 		return
@@ -217,7 +217,7 @@ func (r *WorkloadIdentityFederationRuleResource) Update(ctx context.Context, req
 	}
 	var value workloadIdentityFederationRuleResponse
 	err := r.workloadIdentityRequest(ctx, http.MethodPost, data.resourcePath(), body, &value)
-	r.listCache().invalidate(data.cacheScope())
+	invalidateList(r.client, data.cacheScope())
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to update workload identity federation rule: %s", err))
 		return
@@ -233,7 +233,7 @@ func (r *WorkloadIdentityFederationRuleResource) Delete(ctx context.Context, req
 		return
 	}
 	err := r.workloadIdentityRequest(ctx, http.MethodDelete, data.resourcePath(), nil, nil)
-	r.listCache().invalidate(data.cacheScope())
+	invalidateList(r.client, data.cacheScope())
 	if err != nil && !workloadIdentityNotFound(err) {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to delete workload identity federation rule: %s", err))
 	}

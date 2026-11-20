@@ -3,15 +3,18 @@ package provider
 import (
 	"context"
 	"sync"
+
+	"github.com/openai/openai-go/v3"
 )
 
-// listCaches holds one listCache per configured client, so each provider instance (one plan or apply) refreshes
-// high-cardinality resources with one paginated list per parent rather than one GET per resource.
-var listCaches sync.Map
+// listCache lets each provider instance (one plan or apply) refresh high-cardinality resources with one paginated
+// list per parent rather than one GET per resource. It is keyed by client because the framework builds a new
+// resource for every request.
+var listCache sync.Map // listCacheKey -> *listCacheEntry
 
-type listCache struct {
-	mu      sync.Mutex
-	entries map[string]*listCacheEntry
+type listCacheKey struct {
+	client *openai.Client
+	scope  string
 }
 
 type listCacheEntry struct {
@@ -19,33 +22,15 @@ type listCacheEntry struct {
 	items any
 }
 
-func (r *baseResource) listCache() *listCache {
-	cache, _ := listCaches.LoadOrStore(r.client, &listCache{})
-	return cache.(*listCache)
-}
-
-func (c *listCache) entry(scope string) *listCacheEntry {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.entries == nil {
-		c.entries = map[string]*listCacheEntry{}
-	}
-	if c.entries[scope] == nil {
-		c.entries[scope] = &listCacheEntry{}
-	}
-	return c.entries[scope]
-}
-
-func (c *listCache) invalidate(scope string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	delete(c.entries, scope)
+func invalidateList(client *openai.Client, scope string) {
+	listCache.Delete(listCacheKey{client, scope})
 }
 
 // cachedGet returns the item with the given ID from the list for scope, calling list at most once per scope until
 // it succeeds or the scope is invalidated. A nil item means the ID is absent from the list.
-func cachedGet[T any](ctx context.Context, c *listCache, scope, id string, list func(context.Context) (map[string]T, error)) (*T, error) {
-	entry := c.entry(scope)
+func cachedGet[T any](ctx context.Context, client *openai.Client, scope, id string, list func(context.Context) (map[string]T, error)) (*T, error) {
+	value, _ := listCache.LoadOrStore(listCacheKey{client, scope}, &listCacheEntry{})
+	entry := value.(*listCacheEntry)
 	entry.mu.Lock()
 	defer entry.mu.Unlock()
 	if entry.items == nil {

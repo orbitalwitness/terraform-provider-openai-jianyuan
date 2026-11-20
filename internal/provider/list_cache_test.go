@@ -5,10 +5,12 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+
+	"github.com/openai/openai-go/v3"
 )
 
 func TestCachedGet(t *testing.T) {
-	var cache listCache
+	client := &openai.Client{}
 	var calls atomic.Int32
 	list := func(context.Context) (map[string]string, error) {
 		calls.Add(1)
@@ -18,7 +20,7 @@ func TestCachedGet(t *testing.T) {
 	var wg sync.WaitGroup
 	for range 50 {
 		wg.Go(func() {
-			item, err := cachedGet(t.Context(), &cache, "scope", "a", list)
+			item, err := cachedGet(t.Context(), client, "scope", "a", list)
 			if err != nil || item == nil || *item != "alpha" {
 				t.Errorf("got %v, %v", item, err)
 			}
@@ -29,12 +31,12 @@ func TestCachedGet(t *testing.T) {
 		t.Errorf("expected one list call, got %d", calls.Load())
 	}
 
-	if item, err := cachedGet(t.Context(), &cache, "scope", "missing", list); err != nil || item != nil {
+	if item, err := cachedGet(t.Context(), client, "scope", "missing", list); err != nil || item != nil {
 		t.Errorf("missing item must be nil without error, got %v, %v", item, err)
 	}
 
-	cache.invalidate("scope")
-	if _, err := cachedGet(t.Context(), &cache, "scope", "a", list); err != nil || calls.Load() != 2 {
+	invalidateList(client, "scope")
+	if _, err := cachedGet(t.Context(), client, "scope", "a", list); err != nil || calls.Load() != 2 {
 		t.Errorf("invalidate must force a new list call, got %d calls, err %v", calls.Load(), err)
 	}
 }
